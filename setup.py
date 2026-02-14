@@ -1,0 +1,22 @@
+from setuptools import find_packages
+from distutils.core import setup
+
+setup(name='humanoid_rl_gym',
+      version='0.0.1',
+      author='Tianyang Wu',
+      license="MIT",
+      packages=find_packages(),
+      author_email='993660140@qq.com',
+      description='RL environments for Humanoid Robots',
+      install_requires=[
+            'isaacgym',
+            'rsl-rl',
+            'matplotlib',
+            'numpy==1.20',
+            'tensorboard==2.14.0',
+            'google-auth==2.45.0',
+            'mujoco==3.2.3',
+            'pyyaml',
+            'onnx==1.17.0',
+            'pygame'
+      ])
