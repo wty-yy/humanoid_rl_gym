@@ -172,6 +172,9 @@ class LeggedRobot(BaseTask):
         self.reset_buf = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
         if len(self.termination_contact_indices):
             self.reset_buf = torch.any(torch.norm(self.contact_forces[:, self.termination_contact_indices, :], dim=-1) > 1., dim=1)
+        if self.cfg.asset.terminate_base_height is not None:
+            base_height = self._get_base_height()
+            self.reset_buf |= base_height < self.cfg.asset.terminate_base_height
         # self.reset_buf |= torch.logical_or(torch.abs(self.rpy[:,1])>1.0, torch.abs(self.rpy[:,0])>0.8)
         self.time_out_buf = self.episode_length_buf > self.max_episode_length # no terminal reward for time-outs
         self.reset_buf |= self.time_out_buf

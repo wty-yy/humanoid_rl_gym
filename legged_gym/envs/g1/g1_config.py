@@ -154,7 +154,8 @@ class G1Cfg(LeggedRobotCfg):
         name = "g1"
         foot_name = "ankle_roll"
         penalize_contacts_on = ["hip", "knee"]
-        terminate_after_contacts_on = ["torso", "hand", "head"]
+        terminate_after_contacts_on = []
+        terminate_base_height = 0.3
         lower_body_joint_names = ["hip", "knee", "ankle"]
         upper_body_joint_names = ["waist", "shoulder", "elbow", "wrist"]
 

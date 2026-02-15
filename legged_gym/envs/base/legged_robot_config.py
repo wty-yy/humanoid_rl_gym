@@ -108,6 +108,7 @@ class LeggedRobotCfg(BaseConfig):
         foot_name = "None" # name of the feet bodies, used to index body state and contact force tensors
         penalize_contacts_on = []
         terminate_after_contacts_on = []
+        terminate_base_height = 0.3
         lower_body_joint_names = [] # joint names of lowbody
         upper_body_joint_names = [] # joint names of upper body
         disable_gravity = False
