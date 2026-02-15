@@ -126,6 +126,7 @@ class LeggedRobotCfg(BaseConfig):
         max_linear_velocity = 1000.
         armature = 0.
         thickness = 0.01
+        armatures_overwrite = {'joint_a': 0.01, 'joint_b': 0.01} # armature values for specific joints, overrides default armature
 
     class domain_rand:
         ### Robot properties ###

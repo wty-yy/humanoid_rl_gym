@@ -1,5 +1,10 @@
 from legged_gym.envs.base.legged_robot_config import LeggedRobotCfg, LeggedRobotCfgPPO, LeggedRobotCfgCTS, LeggedRobotCfgMoENGCTS, LeggedRobotCfgMoENGCTS, LeggedRobotCfgMCPCTS, LeggedRobotCfgACMoECTS, LeggedRobotCfgDualMoECTS, LeggedRobotCfgMoECTS
 
+ARMATURE_5020 = 0.003609725
+ARMATURE_7520_14 = 0.010177520
+ARMATURE_7520_22 = 0.025101925
+ARMATURE_4010 = 0.00425
+
 class G1Cfg(LeggedRobotCfg):
     class init_state(LeggedRobotCfg.init_state):
         pos = [0.0, 0.0, 0.793] # x,y,z [m]
@@ -85,27 +90,45 @@ class G1Cfg(LeggedRobotCfg):
     class control(LeggedRobotCfg.control):
         # PD Drive parameters:
         control_type = 'P'
+
+        NATURAL_FREQ = 10 * 2.0 * 3.1415926535  # 62.8318530718
+        DAMPING_RATIO = 2.0
+
+        STIFFNESS_5020 = ARMATURE_5020 * NATURAL_FREQ**2         # 14.2506
+        STIFFNESS_7520_14 = ARMATURE_7520_14 * NATURAL_FREQ**2   # 40.1792
+        STIFFNESS_7520_22 = ARMATURE_7520_22 * NATURAL_FREQ**2   # 99.0984
+        STIFFNESS_4010 = ARMATURE_4010 * NATURAL_FREQ**2         # 16.7783
+
+        DAMPING_5020 = 2.0 * DAMPING_RATIO * ARMATURE_5020 * NATURAL_FREQ       # 0.9072
+        DAMPING_7520_14 = 2.0 * DAMPING_RATIO * ARMATURE_7520_14 * NATURAL_FREQ # 2.5579
+        DAMPING_7520_22 = 2.0 * DAMPING_RATIO * ARMATURE_7520_22 * NATURAL_FREQ # 6.3088
+        DAMPING_4010 = 2.0 * DAMPING_RATIO * ARMATURE_4010 * NATURAL_FREQ       # 1.0681
+
         stiffness = {  # [N*m/rad]
-            'hip_yaw': 100,
-            'hip_roll': 100,
-            'hip_pitch': 100,
-            'knee': 150,
-            'ankle': 40,
-            'waist': 200,
-            'shoulder': 40,
-            'elbow': 40,
-            'wrist': 40,
+            'hip_yaw': STIFFNESS_7520_14,         # 40.1792
+            'hip_roll': STIFFNESS_7520_22,        # 99.0984
+            'hip_pitch': STIFFNESS_7520_14,       # 40.1792
+            'knee': STIFFNESS_7520_22,            # 99.0984
+            'ankle': 2.0 * STIFFNESS_5020,        # 28.5012
+            'waist': 2.0 * STIFFNESS_5020,        # 28.5012 (waist_roll, waist_pitch)
+            'waist_yaw': STIFFNESS_7520_14,       # 40.1792
+            'shoulder': 50,           # 14.2506
+            'elbow': STIFFNESS_5020,              # 14.2506
+            'wrist': STIFFNESS_4010,              # 16.7783 (wrist_pitch, wrist_yaw)
+            'wrist_roll': STIFFNESS_5020,         # 14.2506
         }
         damping = {  # [N*m*s/rad]
-            'hip_yaw': 2,
-            'hip_roll': 2,
-            'hip_pitch': 2,
-            'knee': 4,
-            'ankle': 2,
-            'waist': 4,
-            'shoulder': 10,
-            'elbow': 10,
-            'wrist': 10,
+            'hip_yaw': DAMPING_7520_14,           # 2.5579
+            'hip_roll': DAMPING_7520_22,          # 6.3088
+            'hip_pitch': DAMPING_7520_14,         # 2.5579
+            'knee': DAMPING_7520_22,              # 6.3088
+            'ankle': 2.0 * DAMPING_5020,          # 1.8144
+            'waist': 2.0 * DAMPING_5020,          # 1.8144 (waist_roll, waist_pitch)
+            'waist_yaw': DAMPING_7520_14,         # 2.5579
+            'shoulder': DAMPING_5020,             # 0.9072
+            'elbow': DAMPING_5020,                # 0.9072
+            'wrist': DAMPING_4010,                # 1.0681 (wrist_pitch, wrist_yaw)
+            'wrist_roll': DAMPING_5020,           # 0.9072
         }
         # action scale: target angle = actionScale * action + defaultAngle
         action_scale = 0.25
@@ -161,6 +184,20 @@ class G1Cfg(LeggedRobotCfg):
 
         self_collisions = 0 # 1 to disable, 0 to enable...bitwise filter
         flip_visual_attachments = False
+        armatures_overwrite = {
+            "hip_yaw": ARMATURE_7520_14,
+            "hip_roll": ARMATURE_7520_22,
+            "hip_pitch": ARMATURE_7520_14,
+            "knee": ARMATURE_7520_22,
+            "ankle": 2.0 * ARMATURE_5020, # ankle_pitch, ankle_roll
+            "waist": 2.0 * ARMATURE_5020, # waist_roll, waist_pitch
+            "waist_yaw": ARMATURE_7520_14,
+            "shoulder": ARMATURE_5020, # shoulder_pitch, shoulder_roll, shoulder_yaw
+            "elbow": ARMATURE_5020,
+            "wrist_roll": ARMATURE_5020,
+            "wrist_pitch": ARMATURE_4010,
+            "wrist_yaw": ARMATURE_4010,
+        }
   
     class rewards(LeggedRobotCfg.rewards):
         soft_dof_pos_limit = 0.9

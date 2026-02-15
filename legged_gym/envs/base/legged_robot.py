@@ -338,7 +338,7 @@ class LeggedRobot(BaseTask):
                 props[s].restitution = rand_restitution
         return props
 
-    def _process_dof_props(self, props, env_id):
+    def _process_dof_props(self, props, env_id, dof_names):
         """ Callback allowing to store/change/randomize the DOF properties of each environment.
             Called During environment creation.
             Base behavior: stores position, velocity and torques limits defined in the URDF
@@ -365,6 +365,12 @@ class LeggedRobot(BaseTask):
                 self.dof_pos_limits[i, 0] = m - 0.5 * r * self.cfg.rewards.soft_dof_pos_limit
                 self.dof_pos_limits[i, 1] = m + 0.5 * r * self.cfg.rewards.soft_dof_pos_limit
         
+        # overwrite armature if needed
+        for i in range(len(props)):
+            for joint_name, armature in self.cfg.asset.armatures_overwrite.items():
+                if joint_name in dof_names[i]:
+                    props["armature"][i] = armature
+                    break
         return props
 
     def _process_rigid_body_props(self, props, env_id):
@@ -954,7 +960,7 @@ class LeggedRobot(BaseTask):
             rigid_shape_props = self._process_rigid_shape_props(rigid_shape_props_asset, i)
             self.gym.set_asset_rigid_shape_properties(self.robot_asset, rigid_shape_props)
             actor_handle = self.gym.create_actor(env_handle, self.robot_asset, start_pose, self.cfg.asset.name, i, self.cfg.asset.self_collisions, 0)
-            dof_props = self._process_dof_props(dof_props_asset, i)
+            dof_props = self._process_dof_props(dof_props_asset, i, self.dof_names)
             self.gym.set_actor_dof_properties(env_handle, actor_handle, dof_props)
             body_props = self.gym.get_actor_rigid_body_properties(env_handle, actor_handle)
             if i == 0:
