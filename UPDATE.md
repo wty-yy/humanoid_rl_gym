@@ -1,4 +1,7 @@
 # 20260216
+## v0.0.3.1
+1. 更新upper body奖励关节位置，避免手臂向前过度
+2. 加入sim2sim的g1测试
 ## v0.0.3
 1. 参考unitree_rl_lab发现电机的kp和armature存在问题，加入对armature配置的功能`armatures_overwrite`，对齐unitree_rl_lab中的mimic电机精确配置方案，通过测试发现，g1的damping非常大超过了1.0，而go2的damping为0.5无需armature，而g1必须要armature大约在0.01，而由于不同位置使用了不同型号电机，因此进一步加入精确配置
 # 20260215

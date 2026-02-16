@@ -60,96 +60,154 @@ def export_policy_as_pkl(
 
 
 """
-Helper Classes - Private.
+Helper Functions
 """
 
 
+def detect_algorithm(policy) -> str:
+    """Detect the algorithm type from policy attributes.
+
+    Supported algorithms:
+        - PPO:          actor
+        - CTS:          student_encoder + actor
+        - MoE-CTS:      student_moe_encoder + actor
+        - MoE-NG-CTS:   student_moe_encoder + obs_no_goal_mask + actor
+        - MCP-CTS:      student_encoder + obs_no_goal_mask + actor_mcp
+        - AC-MoE-CTS:   student_encoder + actor_moe
+        - Dual-MoE-CTS: student_moe_encoder + actor_moe
+
+    Detection order matters — more specific checks come first.
+    """
+    has_actor_mcp = hasattr(policy, "actor_mcp")
+    has_actor_moe = hasattr(policy, "actor_moe")
+    has_student_encoder = hasattr(policy, "student_encoder")
+    has_student_moe_encoder = hasattr(policy, "student_moe_encoder")
+    has_no_goal_mask = hasattr(policy, "obs_no_goal_mask")
+
+    # MCP-CTS: actor_mcp + student_encoder + obs_no_goal_mask
+    if has_actor_mcp and has_student_encoder:
+        return "MCP-CTS"
+
+    # Dual-MoE-CTS: actor_moe + student_moe_encoder
+    if has_actor_moe and has_student_moe_encoder:
+        return "Dual-MoE-CTS"
+
+    # AC-MoE-CTS: actor_moe + student_encoder
+    if has_actor_moe and has_student_encoder:
+        return "AC-MoE-CTS"
+
+    # MoE-NG-CTS: student_moe_encoder + obs_no_goal_mask + actor
+    if has_student_moe_encoder and has_no_goal_mask:
+        return "MoE-NG-CTS"
+
+    # MoE-CTS: student_moe_encoder + actor
+    if has_student_moe_encoder:
+        return "MoE-CTS"
+
+    # CTS: student_encoder + actor
+    if has_student_encoder:
+        return "CTS"
+
+    # PPO: plain actor
+    if hasattr(policy, "actor"):
+        return "PPO"
+
+    raise ValueError("Policy does not have a recognized actor/encoder module.")
+
+
 class _TorchPolicyExporter(torch.nn.Module):
-    """Exporter of actor-critic into JIT file."""
+    """Exporter of actor-critic into JIT file.
+
+    Supported algorithms:
+        - PPO:          actor
+        - CTS:          student_encoder + actor
+        - MoE-CTS:      student_moe_encoder + actor
+        - MoE-NG-CTS:   student_moe_encoder + obs_no_goal_mask + actor
+        - MCP-CTS:      student_encoder + obs_no_goal_mask + actor_mcp
+        - AC-MoE-CTS:   student_encoder + actor_moe
+        - Dual-MoE-CTS: student_moe_encoder + actor_moe
+    """
 
     def __init__(self, policy, normalizer=None):
         super().__init__()
-        self.is_recurrent = policy.is_recurrent
-        # copy policy parameters
-        if hasattr(policy, "student_encoder"):
+
+        # --- Detect algorithm type ---
+        algo = detect_algorithm(policy)
+
+        # --- Copy encoder ---
+        if algo in ("CTS", "MCP-CTS", "AC-MoE-CTS"):
             self.student_encoder = copy.deepcopy(policy.student_encoder).cpu()
-            self.history = torch.zeros([1, policy.history.shape[1], policy.history.shape[2]], device='cpu')
-            self.forward = self.forward_cts
-        if hasattr(policy, "student_moe_encoder"):
+        elif algo in ("MoE-CTS", "MoE-NG-CTS", "Dual-MoE-CTS"):
             self.student_moe_encoder = copy.deepcopy(policy.student_moe_encoder).cpu()
-            if hasattr(policy, "obs_no_goal_mask"):
-                self.obs_no_goal_mask = copy.deepcopy(policy.obs_no_goal_mask).cpu()
-            self.history_length = policy.history.shape[1]
-            self.history = torch.zeros([1, policy.history.shape[1], policy.history.shape[2]], device='cpu')
-            self.forward = self.forward_moe_no_goal_cts
-            if not hasattr(policy, "obs_no_goal_mask"):
-                self.forward = self.forward_moe_cts
-        if hasattr(policy, "actor_mcp"):
-            self.actor = copy.deepcopy(policy.actor_mcp)
-            self.obs_no_goal_mask = copy.deepcopy(policy.obs_no_goal_mask).cpu()
-            self.forward = self.forward_mcp_cts
-        elif hasattr(policy, "actor_moe"):
-            self.actor = copy.deepcopy(policy.actor_moe)
-            self.forward = self.forward_ac_moe
-        elif hasattr(policy, "actor"):
-            self.actor = copy.deepcopy(policy.actor)
-            if self.is_recurrent:
-                self.rnn = copy.deepcopy(policy.memory_a.rnn)
-        elif hasattr(policy, "student"):
-            self.actor = copy.deepcopy(policy.student)
-            if self.is_recurrent:
-                self.rnn = copy.deepcopy(policy.memory_s.rnn)
+
+        # --- Copy actor ---
+        if algo in ("MCP-CTS",):
+            self.actor = copy.deepcopy(policy.actor_mcp).cpu()
+        elif algo in ("AC-MoE-CTS", "Dual-MoE-CTS"):
+            self.actor = copy.deepcopy(policy.actor_moe).cpu()
         else:
-            raise ValueError("Policy does not have an actor/student module.")
-        if hasattr(policy, "student_moe_encoder") and hasattr(policy, "actor_moe"):
-            self.forward = self.forward_dual_moe_cts
-        # set up recurrent network
-        if self.is_recurrent:
-            self.rnn.cpu()
-            self.register_buffer("hidden_state", torch.zeros(self.rnn.num_layers, 1, self.rnn.hidden_size))
-            self.register_buffer("cell_state", torch.zeros(self.rnn.num_layers, 1, self.rnn.hidden_size))
-            self.forward = self.forward_lstm
-            self.reset = self.reset_memory
-        # copy normalizer if exists
+            self.actor = copy.deepcopy(policy.actor).cpu()
+
+        # --- Copy goal mask ---
+        if algo in ("MoE-NG-CTS", "MCP-CTS"):
+            self.obs_no_goal_mask = copy.deepcopy(policy.obs_no_goal_mask).cpu()
+
+        # --- Copy history buffer ---
+        if algo != "PPO":
+            self.history_length = policy.history.shape[1]
+            self.history = torch.zeros(1, policy.history.shape[1], policy.history.shape[2], device="cpu")
+
+        # --- Copy normalizer ---
         if normalizer:
-            self.normalizer = copy.deepcopy(normalizer)
+            self.normalizer = copy.deepcopy(normalizer).cpu()
         else:
             self.normalizer = torch.nn.Identity()
 
-    def forward_lstm(self, x):
+        # --- Bind forward method ---
+        self.forward = {
+            "PPO":          self.forward_ppo,
+            "CTS":          self.forward_cts,
+            "MoE-CTS":      self.forward_moe_cts,
+            "MoE-NG-CTS":   self.forward_moe_no_goal_cts,
+            "MCP-CTS":      self.forward_mcp_cts,
+            "AC-MoE-CTS":   self.forward_ac_moe_cts,
+            "Dual-MoE-CTS": self.forward_dual_moe_cts,
+        }[algo]
+
+    # --- Forward methods (one per algorithm) ---
+
+    # PPO
+    def forward_ppo(self, x):
         x = self.normalizer(x)
-        x, (h, c) = self.rnn(x.unsqueeze(0), (self.hidden_state, self.cell_state))
-        self.hidden_state[:] = h
-        self.cell_state[:] = c
-        x = x.squeeze(0)
         return self.actor(x)
 
-    def forward(self, x):
-        return self.actor(self.normalizer(x))
-    
-    def forward_cts(self, x):  # x is single observations
+    # CTS
+    def forward_cts(self, x):
         x = self.normalizer(x)
         self.history = torch.cat([self.history[:, 1:], x.unsqueeze(1)], dim=1)
         latent = self.student_encoder(self.history.flatten(1))
         x = torch.cat([latent, x], dim=1)
-        return self.actor(x), (None, latent)
-    
-    def forward_moe_no_goal_cts(self, x):  # x is single observations
+        return self.actor(x), (latent,)
+
+    # MoE-CTS
+    def forward_moe_cts(self, x):
+        x = self.normalizer(x)
+        self.history = torch.cat([self.history[:, 1:], x.unsqueeze(1)], dim=1)
+        latent, weights = self.student_moe_encoder(self.history.flatten(1))
+        x = torch.cat([latent, x], dim=1)
+        return self.actor(x), (latent, weights)
+
+    # MoE-NG-CTS (MoE with No-Goal mask)
+    def forward_moe_no_goal_cts(self, x):
         x = self.normalizer(x)
         self.history = torch.cat([self.history[:, 1:], x.unsqueeze(1)], dim=1)
         history_no_goal = self.history.reshape(1, self.history_length, -1)[:, :, self.obs_no_goal_mask].reshape(1, -1)
         latent, weights = self.student_moe_encoder(self.history.flatten(1), history_no_goal)
         x = torch.cat([latent, x], dim=1)
-        return self.actor(x), (weights, latent)
+        return self.actor(x), (latent, weights)
 
-    def forward_moe_cts(self, x):  # x is single observations
-        x = self.normalizer(x)
-        self.history = torch.cat([self.history[:, 1:], x.unsqueeze(1)], dim=1)
-        latent, weights = self.student_moe_encoder(self.history.flatten(1))
-        x = torch.cat([latent, x], dim=1)
-        return self.actor(x), (weights, latent)
-    
-    def forward_mcp_cts(self, x):  # x is single observations
+    # MCP-CTS
+    def forward_mcp_cts(self, x):
         x = self.normalizer(x)
         self.history = torch.cat([self.history[:, 1:], x.unsqueeze(1)], dim=1)
         x_no_goal = x[:, self.obs_no_goal_mask]
@@ -157,32 +215,32 @@ class _TorchPolicyExporter(torch.nn.Module):
         x = torch.cat([latent, x], dim=1)
         x_no_goal = torch.cat([latent, x_no_goal], dim=1)
         mean_action, _, weights = self.actor(x, x_no_goal)
-        return mean_action, (weights, latent)
+        return mean_action, (latent, weights)
 
-    def forward_ac_moe(self, x):  # x is single observations
+    # AC-MoE-CTS
+    def forward_ac_moe_cts(self, x):
         x = self.normalizer(x)
         self.history = torch.cat([self.history[:, 1:], x.unsqueeze(1)], dim=1)
         latent = self.student_encoder(self.history.flatten(1))
         x = torch.cat([latent, x], dim=1)
         mean, weights = self.actor(x)
-        return mean, (weights, latent)
+        return mean, (latent, weights)
 
-    def forward_dual_moe_cts(self, x):  # x is single observations
+    # Dual-MoE-CTS
+    def forward_dual_moe_cts(self, x):
         x = self.normalizer(x)
         self.history = torch.cat([self.history[:, 1:], x.unsqueeze(1)], dim=1)
         latent, student_weights = self.student_moe_encoder(self.history.flatten(1))
         x = torch.cat([latent, x], dim=1)
         mean, actor_weights = self.actor(x)
-        return mean, (student_weights, actor_weights, latent)
+        return mean, (latent, student_weights, actor_weights)
+
+    # --- Reset & Export ---
 
     @torch.jit.export
     def reset(self):
         if hasattr(self, 'history'):
             self.history = torch.zeros_like(self.history)
-
-    def reset_memory(self):
-        self.hidden_state[:] = 0.0
-        self.cell_state[:] = 0.0
 
     def export(self, path, filename):
         os.makedirs(path, exist_ok=True)
@@ -193,137 +251,143 @@ class _TorchPolicyExporter(torch.nn.Module):
 
 
 class _OnnxPolicyExporter(torch.nn.Module):
-    """Exporter of actor-critic into ONNX file."""
+    """Exporter of actor-critic into ONNX file.
+
+    Supported algorithms:
+        - PPO:          actor
+        - CTS:          student_encoder + actor
+        - MoE-CTS:      student_moe_encoder + actor
+        - MoE-NG-CTS:   student_moe_encoder + obs_no_goal_mask + actor
+        - MCP-CTS:      student_encoder + obs_no_goal_mask + actor_mcp
+        - AC-MoE-CTS:   student_encoder + actor_moe
+        - Dual-MoE-CTS: student_moe_encoder + actor_moe
+    """
 
     def __init__(self, policy, normalizer=None, verbose=False):
         super().__init__()
         self.verbose = verbose
-        self.input_dim = None
-        self.num_actions = 12
         self.normalizer = torch.nn.Identity()
-        
-        # copy policy parameters
-        if hasattr(policy, 'student_encoder'):
+
+        # --- Detect algorithm type and copy components ---
+        algo = detect_algorithm(policy)
+
+        # Copy encoder
+        if algo in ("CTS", "MCP-CTS", "AC-MoE-CTS"):
             self.student_encoder = copy.deepcopy(policy.student_encoder)
-            self.forward = self.forward_cts
-            self.input_dim = self.student_encoder[0].in_features
-            
-        elif hasattr(policy, "student_moe_encoder"):
+        elif algo in ("MoE-CTS", "MoE-NG-CTS", "Dual-MoE-CTS"):
             self.student_moe_encoder = copy.deepcopy(policy.student_moe_encoder)
-            self.history_length = policy.history.shape[1]
-            self.forward = self.forward_moe_no_goal_cts
-            self.input_dim = self.history_length * policy.history.shape[2]
-            if hasattr(policy, "obs_no_goal_mask"):
-                self.obs_no_goal_mask = copy.deepcopy(policy.obs_no_goal_mask).cpu()
-            else:
-                self.forward = self.forward_moe_cts
-        
-        else:  # PPO
-            self.forward = self.forward_ppo
-            
-        if hasattr(policy, "actor"):
-            self.actor = copy.deepcopy(policy.actor)
-            if hasattr(self, 'is_recurrent') and self.is_recurrent:
-                self.rnn = copy.deepcopy(policy.memory_a.rnn)
-            if self.input_dim is None:
-                 self.input_dim = self.actor[0].in_features
-        elif hasattr(policy, "actor_mcp"):
+
+        # Copy actor
+        if algo in ("MCP-CTS",):
             self.actor = copy.deepcopy(policy.actor_mcp)
-            self.obs_no_goal_mask = copy.deepcopy(policy.obs_no_goal_mask).cpu()
-            self.history_length = policy.history.shape[1]
-            self.forward = self.forward_mcp_cts 
+        elif algo in ("AC-MoE-CTS", "Dual-MoE-CTS"):
+            self.actor = copy.deepcopy(policy.actor_moe)
         else:
-            raise ValueError("Policy does not have an actor/student module.")
+            self.actor = copy.deepcopy(policy.actor)
 
-    def flatten_obs(self, x):  # flatten stack obs by terms to stack by step frames
-        term_dims = [3, 3, 3, self.num_actions, self.num_actions, self.num_actions]
-        obs_dim = sum(term_dims)
-        if x.shape[1] % obs_dim != 0:
-            raise ValueError(f"x.shape[1] ({x.shape[1]}) 不是 obs_dim ({obs_dim}) 的整数倍")
-            
-        frames = x.shape[1] // obs_dim
-        split_sizes = [dim * frames for dim in term_dims]
-        # [B, dim0*frames], [B, dim1*frames], ...
-        term_chunks = torch.split(x, split_sizes, dim=1)
+        # Copy goal mask
+        if algo in ("MoE-NG-CTS", "MCP-CTS"):
+            self.obs_no_goal_mask = copy.deepcopy(policy.obs_no_goal_mask).cpu()
 
-        # [ [B, frames, dim0], [B, frames, dim1], ... ]
-        frame_terms_reshaped = [
-            chunk.view(-1, frames, dim) 
-            for chunk, dim in zip(term_chunks, term_dims)
-        ]
+        # Copy history shape info
+        if algo != "PPO":
+            self.history_length = policy.history.shape[1]
+            self.obs_dim = policy.history.shape[2]
+            self.input_dim = self.history_length * self.obs_dim
+        else:
+            self.input_dim = self.actor[0].in_features
 
-        history_by_frame = []
-        for i in range(frames):
-            # [ [B, dim0], [B, dim1], ... ]
-            terms_for_this_frame = [ftr[:, i, :] for ftr in frame_terms_reshaped]
-            history_by_frame.append(torch.cat(terms_for_this_frame, dim=1))
-        # [B, (Frame0_AllTerms), (Frame1_AllTerms), ...]
-        history = torch.cat(history_by_frame, dim=1)
-        return history, obs_dim
-    
-    def forward_ppo(self, x):  # x is stack observations by terms
+        # Bind forward method
+        self._algo = algo
+        self.forward = {
+            "PPO":          self.forward_ppo,
+            "CTS":          self.forward_cts,
+            "MoE-CTS":      self.forward_moe_cts,
+            "MoE-NG-CTS":   self.forward_moe_no_goal_cts,
+            "MCP-CTS":      self.forward_mcp_cts,
+            "AC-MoE-CTS":   self.forward_ac_moe_cts,
+            "Dual-MoE-CTS": self.forward_dual_moe_cts,
+        }[algo]
+
+    # --- Forward methods (one per algorithm) ---
+
+    # PPO
+    def forward_ppo(self, x):
         x = self.normalizer(x)
-        history, obs_dim = self.flatten_obs(x)
-        last_obs = history[:, -obs_dim:]
-        return self.actor(last_obs)
-
-    def forward_cts(self, x):  # x is stack observations by terms
-        x = self.normalizer(x)
-        history, obs_dim = self.flatten_obs(x)
-
-        last_obs = history[:, -obs_dim:]
-        latent = self.student_encoder(history)
-        x = torch.cat([latent, last_obs], dim=1)
-        
         return self.actor(x)
 
-    def forward_moe_no_goal_cts(self, x):
+    # CTS
+    def forward_cts(self, x):
         x = self.normalizer(x)
-        history, obs_dim = self.flatten_obs(x)
-
-        last_obs = history[:, -obs_dim:]
-        history_3d = history.view(-1, self.history_length, obs_dim)
-        history_no_goal = history_3d[:, :, self.obs_no_goal_mask].reshape(x.shape[0], -1)
-
-        latent, weights = self.student_moe_encoder(history, history_no_goal)
+        last_obs = x[:, -self.obs_dim:]
+        latent = self.student_encoder(x)
         x = torch.cat([latent, last_obs], dim=1)
+        return self.actor(x), latent
 
-        return self.actor(x), weights, latent
-
+    # MoE-CTS
     def forward_moe_cts(self, x):
         x = self.normalizer(x)
-        history, obs_dim = self.flatten_obs(x)
-
-        last_obs = history[:, -obs_dim:]
-
-        latent, weights = self.student_moe_encoder(history)
+        last_obs = x[:, -self.obs_dim:]
+        latent, weights = self.student_moe_encoder(x)
         x = torch.cat([latent, last_obs], dim=1)
+        return self.actor(x), latent, weights
 
-        return self.actor(x), weights, latent
-    
+    # MoE-NG-CTS (MoE with No-Goal mask)
+    def forward_moe_no_goal_cts(self, x):
+        x = self.normalizer(x)
+        last_obs = x[:, -self.obs_dim:]
+        history_3d = x.view(-1, self.history_length, self.obs_dim)
+        history_no_goal = history_3d[:, :, self.obs_no_goal_mask].reshape(x.shape[0], -1)
+        latent, weights = self.student_moe_encoder(x, history_no_goal)
+        x = torch.cat([latent, last_obs], dim=1)
+        return self.actor(x), latent, weights
+
+    # MCP-CTS
     def forward_mcp_cts(self, x):
         x = self.normalizer(x)
-        history, obs_dim = self.flatten_obs(x)
-
-        last_obs = history[:, -obs_dim:]
+        last_obs = x[:, -self.obs_dim:]
         obs_no_goal = last_obs[:, self.obs_no_goal_mask]
-        latent = self.student_encoder(history)
+        latent = self.student_encoder(x)
         x_in = torch.cat([latent, last_obs], dim=1)
         x_no_goal_in = torch.cat([latent, obs_no_goal], dim=1)
-        
         mean_action, _, weights = self.actor(x_in, x_no_goal_in)
-        return mean_action, weights
+        return mean_action, latent, weights
+
+    # AC-MoE-CTS
+    def forward_ac_moe_cts(self, x):
+        x = self.normalizer(x)
+        last_obs = x[:, -self.obs_dim:]
+        latent = self.student_encoder(x)
+        x = torch.cat([latent, last_obs], dim=1)
+        mean, weights = self.actor(x)
+        return mean, latent, weights
+
+    # Dual-MoE-CTS
+    def forward_dual_moe_cts(self, x):
+        x = self.normalizer(x)
+        last_obs = x[:, -self.obs_dim:]
+        latent, student_weights = self.student_moe_encoder(x)
+        x = torch.cat([latent, last_obs], dim=1)
+        mean, actor_weights = self.actor(x)
+        return mean, latent, student_weights, actor_weights
+
+    # --- ONNX export ---
+
+    # Output names per algorithm
+    _OUTPUT_NAMES = {
+        "PPO":          ["actions"],
+        "CTS":          ["actions", "latent"],
+        "MoE-CTS":      ["actions", "latent", "weights"],
+        "MoE-NG-CTS":   ["actions", "latent", "weights"],
+        "MCP-CTS":      ["actions", "latent", "weights"],
+        "AC-MoE-CTS":   ["actions", "latent", "weights"],
+        "Dual-MoE-CTS": ["actions", "latent", "student_weights", "actor_weights"],
+    }
 
     def export(self, path, filename):
         self.to("cpu")
         obs = torch.zeros(1, self.input_dim)
-        
-        output_names = ["actions"]
-        if self.forward == self.forward_moe_no_goal_cts:
-            output_names.append("weights")
-            output_names.append("latent")
-        if self.forward == self.forward_mcp_cts:
-            output_names.append("weights")
+        output_names = self._OUTPUT_NAMES[self._algo]
 
         torch.onnx.export(
             self,

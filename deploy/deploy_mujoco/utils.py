@@ -4,11 +4,12 @@ import mujoco
 import mujoco.viewer
 
 class MujocoRenderUtils:
-    def __init__(self, render_fps, sim_dt):
+    def __init__(self, arrow_z_offset=0.2):
         self.target_velocity = None
 
         self.vis_smooth_factor = 1.0
         self.ren_smooth_factor = 1.0
+        self.arrow_z_offset = arrow_z_offset
 
         self.vis_cur_vel = np.zeros(3)
         self.ren_cur_vel = np.zeros(3)
@@ -64,7 +65,7 @@ class MujocoRenderUtils:
             base_quat = self.mj_data.qpos[3:7]
             
             # rendering arrows start position
-            offset_body = np.array([0.0, 0.0, 0.2])
+            offset_body = np.array([0.0, 0.0, self.arrow_z_offset])
             offset_world = np.zeros(3)
             mujoco.mju_rotVecQuat(offset_world, offset_body, base_quat)
             start_pos = base_pos_world + offset_world

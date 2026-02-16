@@ -202,6 +202,7 @@ class LeggedRobotCfg(BaseConfig):
         #     "max_sigma": [1/3, 1/4, 1/4, 1/2.7, 1/2.7, 1/2, 1, 1, 1/4]
         # }
         min_legs_distance = 0.1  # min distance between legs to not be considered stumbling
+        upper_body_to_default = {"joint_a": 0.1, "joint_b": 0.2}  # reward to upper body joints to default position
 
     class normalization:
         class obs_scales:

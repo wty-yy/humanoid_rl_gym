@@ -63,5 +63,5 @@ class G1Robot(LeggedRobot):
 
     def _reward_upper_body_to_default(self):
         upper_body_pos = self.dof_pos[:, self.upper_body_dof_indices]
-        default_upper_body_pos = self.default_dof_pos[:, self.upper_body_dof_indices]
+        default_upper_body_pos = self.upper_body_rew_pos.unsqueeze(0)
         return torch.sum(torch.abs(upper_body_pos - default_upper_body_pos), dim=1)

@@ -212,6 +212,25 @@ class G1Cfg(LeggedRobotCfg):
         ]
         tracking_sigma = 0.25 # tracking reward = exp(-error^2/sigma)
         dynamic_sigma = None
+        upper_body_to_default = {
+            "waist_yaw_joint": 0.0,
+            "waist_roll_joint": 0.0,
+            "waist_pitch_joint": 0.0,
+            "left_shoulder_pitch_joint": 0.0,
+            "left_shoulder_roll_joint": 0.20,
+            "left_shoulder_yaw_joint": 0.0,
+            "left_elbow_joint": 1.36,
+            "left_wrist_roll_joint": 0.15,
+            "left_wrist_pitch_joint": 0.0,
+            "left_wrist_yaw_joint": 0.0,
+            "right_shoulder_pitch_joint": 0.0,
+            "right_shoulder_roll_joint": -0.20,
+            "right_shoulder_yaw_joint": 0.0,
+            "right_elbow_joint": 1.36,
+            "right_wrist_roll_joint": -0.15,
+            "right_wrist_pitch_joint": 0.0,
+            "right_wrist_yaw_joint": 0.0,
+        }
         class scales:
             tracking_lin_vel = 1.0
             tracking_ang_vel = 0.5
@@ -226,7 +245,6 @@ class G1Cfg(LeggedRobotCfg):
             collision = -1.0
             dof_pos_limits = -2.0
             feet_regulation = -0.05
-            
             upper_body_to_default = -0.05
 
     class noise(LeggedRobotCfg.noise):

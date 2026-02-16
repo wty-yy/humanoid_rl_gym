@@ -774,10 +774,15 @@ class LeggedRobot(BaseTask):
 
         # joint positions offsets and PD gains
         self.default_dof_pos = torch.zeros(self.num_dof, dtype=torch.float, device=self.device, requires_grad=False)
+        self.upper_body_rew_pos = torch.zeros(len(self.upper_body_dof_indices), dtype=torch.float, device=self.device, requires_grad=False)
         for i in range(self.num_dofs):
             name = self.dof_names[i]
             angle = self.cfg.init_state.default_joint_angles[name]
             self.default_dof_pos[i] = angle
+            if i < len(self.upper_body_dof_indices):
+                name_upper = self.dof_names[self.upper_body_dof_indices[i]]
+                angle_upper = self.cfg.init_state.default_joint_angles[name_upper]
+                self.upper_body_rew_pos[i] = angle_upper
             found = False
             for dof_name in self.cfg.control.stiffness.keys():
                 if dof_name in name:
