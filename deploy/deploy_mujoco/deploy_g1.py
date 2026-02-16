@@ -244,9 +244,10 @@ if __name__ == "__main__":
                 last_action = action
                 result = policy(obs_tensor)
                 if isinstance(result, tuple):
-                    action, (latent, weights) = result  # moe
+                    action, infos = result  # moe
                     action = action.detach().numpy().squeeze()[idx_model2mj]
                     if visualize_moe_weights:
+                        latent, weights = infos[:2]
                         weights = weights.detach().numpy().squeeze()
                         latent = latent.detach().numpy().squeeze()
                         if bars is None:

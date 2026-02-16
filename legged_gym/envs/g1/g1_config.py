@@ -158,9 +158,15 @@ class G1Cfg(LeggedRobotCfg):
             'heading': [-1.57, 1.57], # min max [rad]
         }, { # list for command range curriculums at specific training iterations
             'iter': 15000, # training iteration at which the command ranges are updated
-            'lin_vel_x': [-1.0, 1.0], # min max [m/s]
+            'lin_vel_x': [-1.2, 1.2], # min max [m/s]
             'lin_vel_y': [-0.5, 0.5], # min max [m/s]
             'ang_vel_yaw': [-1.5, 1.5], # min max [rad/s]
+            'heading': [-1.57, 1.57], # min max [rad]
+        }, {
+            'iter': 25000, # training iteration at which the command ranges are updated
+            'lin_vel_x': [-2.0, 2.0], # min max [m/s]
+            'lin_vel_y': [-0.8, 0.8], # min max [m/s]
+            'ang_vel_yaw': [-2.0, 2.0], # min max [rad/s]
             'heading': [-1.57, 1.57], # min max [rad]
         }]
         # [wave, slope, rough slope, stairs up, stairs down, obstacles, stepping stones, gap, flat]
