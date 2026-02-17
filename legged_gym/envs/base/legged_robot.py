@@ -562,7 +562,7 @@ class LeggedRobot(BaseTask):
             zero_mask = (rand_prob >= min_prob) * (rand_prob < max_prob) * (next_resampling_step > 0.0)
             zero_env_ids = env_ids[zero_mask]
             if len(zero_env_ids) > 0:
-                self.commands[zero_env_ids, :2] = 0.0
+                self.commands[zero_env_ids, :3] = 0.0
                 self.commands_resampling_step[zero_env_ids] = next_resampling_step[zero_mask]
                 if self.cfg.commands.limit_ang_vel_at_zero_command_prob > 0.0:
                     ang_vel_rand = torch.rand(len(zero_env_ids), device=self.device) # independent distribution
@@ -775,13 +775,15 @@ class LeggedRobot(BaseTask):
         # joint positions offsets and PD gains
         self.default_dof_pos = torch.zeros(self.num_dof, dtype=torch.float, device=self.device, requires_grad=False)
         self.upper_body_rew_pos = torch.zeros(len(self.upper_body_dof_indices), dtype=torch.float, device=self.device, requires_grad=False)
+        self.stance_body_rew_pos = torch.zeros(self.num_dof, dtype=torch.float, device=self.device, requires_grad=False)
         for i in range(self.num_dofs):
             name = self.dof_names[i]
             angle = self.cfg.init_state.default_joint_angles[name]
             self.default_dof_pos[i] = angle
+            self.stance_body_rew_pos[i] = self.cfg.rewards.stance_body_to_default[name]
             if i < len(self.upper_body_dof_indices):
-                name_upper = self.dof_names[self.upper_body_dof_indices[i]]
-                angle_upper = self.cfg.init_state.default_joint_angles[name_upper]
+                upper_name = self.dof_names[self.upper_body_dof_indices[i]]
+                angle_upper = self.cfg.rewards.upper_body_to_default[upper_name]
                 self.upper_body_rew_pos[i] = angle_upper
             found = False
             for dof_name in self.cfg.control.stiffness.keys():

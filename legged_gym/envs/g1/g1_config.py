@@ -237,6 +237,21 @@ class G1Cfg(LeggedRobotCfg):
             "right_wrist_pitch_joint": 0.0,
             "right_wrist_yaw_joint": 0.0,
         }
+        stance_body_to_default = {
+            "left_hip_pitch_joint": -0.1,
+            "left_hip_roll_joint": 0.0,
+            "left_hip_yaw_joint": 0.0,
+            "left_knee_joint": 0.3,
+            "left_ankle_pitch_joint": -0.2,
+            "left_ankle_roll_joint": 0.0,
+            "right_hip_pitch_joint": -0.1,
+            "right_hip_roll_joint": 0.0,
+            "right_hip_yaw_joint": 0.0,
+            "right_knee_joint": 0.3,
+            "right_ankle_pitch_joint": -0.2,
+            "right_ankle_roll_joint": 0.0,
+            **upper_body_to_default,
+        }
         class scales:
             tracking_lin_vel = 1.0
             tracking_ang_vel = 0.5
@@ -252,6 +267,7 @@ class G1Cfg(LeggedRobotCfg):
             dof_pos_limits = -2.0
             feet_regulation = -0.05
             upper_body_to_default = -0.05
+            stance_to_default = -0.1
 
     class noise(LeggedRobotCfg.noise):
         add_noise = True
