@@ -266,8 +266,8 @@ class G1Cfg(LeggedRobotCfg):
             collision = -1.0
             dof_pos_limits = -2.0
             feet_regulation = -0.05
-            upper_body_to_default = -0.05
-            stance_to_default = -0.1
+            upper_body_to_default = -0.1
+            stance_to_default = -0.2
 
     class noise(LeggedRobotCfg.noise):
         add_noise = True
