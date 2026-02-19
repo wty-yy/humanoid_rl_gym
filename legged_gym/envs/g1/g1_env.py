@@ -70,3 +70,23 @@ class G1Robot(LeggedRobot):
         stance = (self.commands[:, :3] == 0.0).all(dim=1)
         default_stance_pos = self.stance_body_rew_pos.unsqueeze(0)
         return torch.sum(torch.abs(self.dof_pos - default_stance_pos), dim=1) * stance
+
+    def _reward_parallel_feet(self):
+        # feet_indices = [6, 12]
+        rigid_body_states = self.rigid_body_states.view(self.num_envs, self.num_bodies, 13)
+        left_foot_quat = rigid_body_states[:, self.feet_indices[0], 3:7]
+        right_foot_quat = rigid_body_states[:, self.feet_indices[1], 3:7]
+
+        # left x-axis -> world frame -> right foot frame
+        left_forward_world = quat_apply(left_foot_quat, self.forward_vec)
+        left_forward_right_frame = quat_rotate_inverse(right_foot_quat, left_forward_world)
+
+        # left x-axis in right foot frame's x-y plane angle
+        theta = torch.atan2(left_forward_right_frame[:, 1], left_forward_right_frame[:, 0])
+        # is_pigeon_toed = theta < 0
+
+        threshold = 0.1  # [rad]
+        rew = theta.abs() * (theta.abs() > threshold)
+        cmd_ang_err = torch.exp(-torch.square(self.commands[:, 2]) * 10)
+        rew = rew * cmd_ang_err
+        return rew

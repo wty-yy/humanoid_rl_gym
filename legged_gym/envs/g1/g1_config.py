@@ -268,6 +268,7 @@ class G1Cfg(LeggedRobotCfg):
             feet_regulation = -0.05
             upper_body_to_default = -0.1
             stance_to_default = -0.2
+            parallel_feet = -0.1
 
     class noise(LeggedRobotCfg.noise):
         add_noise = True

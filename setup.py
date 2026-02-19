@@ -2,7 +2,7 @@ from setuptools import find_packages
 from distutils.core import setup
 
 setup(name='humanoid_rl_gym',
-      version='0.0.4.1',
+      version='0.0.4.2',
       author='Tianyang Wu',
       license="MIT",
       packages=find_packages(),
