@@ -204,6 +204,8 @@ class LeggedRobotCfg(BaseConfig):
         min_legs_distance = 0.1  # min distance between legs to not be considered stumbling
         upper_body_to_default = {"joint_a": 0.1, "joint_b": 0.2}  # reward to upper body joints to default position
         stance_body_to_default = {"joint_a": 0.1, "joint_b": 0.2}  # reward to stance body joints to default position
+        feet_distance_theshold = 0.1  # distance between feet lower which the robot is penalized for feet distance
+        feet_air_delta_height = None  # delta height between feet for feet_regulation reward (None to ignore)
 
     class normalization:
         class obs_scales:

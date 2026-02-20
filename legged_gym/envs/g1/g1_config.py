@@ -44,10 +44,11 @@ class G1Cfg(LeggedRobotCfg):
 
     class env(LeggedRobotCfg.env):
         num_envs = 8192
-        # ang_vel(3) + gravity(3) + commands(3) + dof_pos(29) + dof_vel(29) + previous_actions(29) + gait_phase(2)
-        num_observations = 3 + 3 + 3 + 29 + 29 + 29 + 2 # 98
-        # base_lin_vel(3) + obs(98) + foot_contact_forces(2) + torques(29) + motor_accelerations(29) + height_measurements(187)
-        num_privileged_obs = 3 + 98 + 2 + 29 + 29 + 187  # 348
+        # ang_vel(3) + gravity(3) + commands(3) + dof_pos(29) + dof_vel(29) + previous_actions(29)
+        num_observations = 3 + 3 + 3 + 29 + 29 + 29 # 96
+        # base_lin_vel(3) + obs(96) + foot_contact_forces(2) + torques(29) + motor_accelerations(29) + height_measurements(187)
+        num_privileged_obs = 3 + 96 + 2 + 29 + 29 + 187  # 346
+
         num_actions = 29
         episode_length_s = 25
 
@@ -252,6 +253,8 @@ class G1Cfg(LeggedRobotCfg):
             "right_ankle_roll_joint": 0.0,
             **upper_body_to_default,
         }
+        # feet_distance_theshold = 0.2
+        feet_air_delta_height = 0.02  # delta height between feet for feet_regulation reward (None to ignore)
         class scales:
             tracking_lin_vel = 1.0
             tracking_ang_vel = 0.5
@@ -266,9 +269,12 @@ class G1Cfg(LeggedRobotCfg):
             collision = -1.0
             dof_pos_limits = -2.0
             feet_regulation = -0.05
+
             upper_body_to_default = -0.1
             stance_to_default = -0.2
             parallel_feet = -0.1
+            orientation_xy = -5.0
+            # feet_distance = -100.0
 
     class noise(LeggedRobotCfg.noise):
         add_noise = True

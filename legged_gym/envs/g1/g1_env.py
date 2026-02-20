@@ -29,8 +29,6 @@ class G1Robot(LeggedRobot):
     def compute_observations(self):
         """ Computes observations
         """
-        phase = self._get_phase()
-        gait_phase = torch.stack((torch.sin(2 * np.pi * phase), torch.cos(2 * np.pi * phase)), dim=-1)
         self.obs_buf = torch.cat((
             self.base_ang_vel * self.obs_scales.ang_vel,
             self.projected_gravity,
@@ -38,7 +36,6 @@ class G1Robot(LeggedRobot):
             (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,
             self.dof_vel * self.obs_scales.dof_vel,
             self.actions,
-            gait_phase,
         ), dim=-1)
         
         heights = torch.clip(self.root_states[:, 2].unsqueeze(1) - 0.5 - self.measured_heights, -1, 1.0) * self.obs_scales.height_measurements
@@ -51,7 +48,6 @@ class G1Robot(LeggedRobot):
             (self.dof_pos - self.default_dof_pos) * self.obs_scales.dof_pos,
             self.dof_vel * self.obs_scales.dof_vel,
             self.actions,
-            gait_phase,
             torch.norm(self.contact_forces[:, self.feet_indices, :], dim=-1) * 1e-3,  # foot contact forces (4,)
             self.torques / self.torque_limits,  # motor torques (12,)
             (self.last_dof_vel - self.dof_vel) / self.dt * 1e-4,  # motor accelerations (12,)

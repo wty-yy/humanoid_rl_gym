@@ -1136,43 +1136,53 @@ class LeggedRobot(BaseTask):
         points[:, :, 1] = grid_y.flatten()
         return points
 
-    def _get_heights(self, env_ids=None):
-        """ Samples heights of the terrain at required points around each robot.
-            The points are offset by the base's position and rotated by the base's yaw
-
+    def _get_terrain_height_at(self, points_xy):
+        """ Get xy coordinates of points in the world frame and return the terrain height at these points.
         Args:
-            env_ids (List[int], optional): Subset of environments for which to return the heights. Defaults to None.
-
-        Raises:
-            NameError: [description]
-
+            points_xy: shape (..., 2), xy coordinates of points in the world frame
         Returns:
-            [type]: [description]
+            heights: shape (...), terrain height at the input points
         """
         if self.cfg.terrain.mesh_type == "plane":
-            return torch.zeros(self.num_envs, self.num_height_points, device=self.device, requires_grad=False)
+            return torch.zeros_like(points_xy[..., 0])
         elif self.cfg.terrain.mesh_type == "none":
             raise NameError("Can't measure height with terrain mesh type 'none'")
 
-        if env_ids:
-            points = quat_apply_yaw(self.base_quat[env_ids].repeat(1, self.num_height_points), self.height_points[env_ids]) + (self.root_states[env_ids, :3]).unsqueeze(1)
-        else:
-            points = quat_apply_yaw(self.base_quat.repeat(1, self.num_height_points), self.height_points) + (self.root_states[:, :3]).unsqueeze(1)
+        original_shape = points_xy.shape[:-1]
+        points_xy_flat = points_xy.reshape(-1, 2)
 
-        points += self.terrain.cfg.border_size
-        points = (points / self.terrain.cfg.horizontal_scale).long()
-        px = points[:, :, 0].view(-1)
-        py = points[:, :, 1].view(-1)
+        # convert world coordinates to heightmap coordinates
+        points_grid = (points_xy_flat + self.cfg.terrain.border_size) / self.cfg.terrain.horizontal_scale
+        indices = points_grid.long()
+        px = indices[:, 0]
+        py = indices[:, 1]
+
+        # avoid index out of bounds
         px = torch.clip(px, 0, self.height_samples.shape[0] - 2)
         py = torch.clip(py, 0, self.height_samples.shape[1] - 2)
 
+        # extract heights of the three neighboring points and take the minimum (conservative terrain height estimation)
         heights1 = self.height_samples[px, py]
         heights2 = self.height_samples[px + 1, py]
         heights3 = self.height_samples[px, py + 1]
         heights = torch.min(heights1, heights2)
         heights = torch.min(heights, heights3)
-        
-        return heights.view(self.num_envs, -1) * self.terrain.cfg.vertical_scale
+
+        terrain_heights = (heights * self.cfg.terrain.vertical_scale).view(original_shape)
+        return terrain_heights
+
+    def _get_heights(self, env_ids=None):
+        """ Samples heights of the terrain at required points around each robot.
+            The points are offset by the base's position and rotated by the base's yaw
+        Args:
+            env_ids (List[int], optional): Subset of environments for which to return the heights. Defaults to None.
+        """
+        if env_ids:
+            points = quat_apply_yaw(self.base_quat[env_ids].repeat(1, self.num_height_points), self.height_points[env_ids]) + (self.root_states[env_ids, :3]).unsqueeze(1)
+        else:
+            points = quat_apply_yaw(self.base_quat.repeat(1, self.num_height_points), self.height_points) + (self.root_states[:, :3]).unsqueeze(1)
+
+        return self._get_terrain_height_at(points[:, :, :2])
 
 
     #------------ reward functions----------------
@@ -1187,27 +1197,6 @@ class LeggedRobot(BaseTask):
     def _reward_orientation(self):
         # Penalize non flat base orientation
         return torch.sum(torch.square(self.projected_gravity[:, :2]), dim=1)
-
-    # def _reward_base_height(self):
-    #     # Penalize base height away from target
-    #     base_height = self.root_states[:, 2]
-    #     return torch.square(base_height - self.cfg.rewards.base_height_target)
-
-    def _reward_base_height(self):
-        # Penalize base height away from target
-        contact = self.contact_forces[:, self.feet_indices, 2] > 1.
-        if not hasattr(self, 'last_contacts2'):
-            self.last_contacts2 = torch.zeros_like(contact)
-        contact_filt = torch.logical_or(contact, self.last_contacts2)  # (N, 4)
-        self.last_contacts2 = contact
-        feet_pos = self.rigid_body_states.view(self.num_envs, self.num_bodies, 13)[:, self.feet_indices, 0:3]
-        num_feet_contact = torch.sum(contact_filt, dim=1, keepdim=True).clamp(min=1.0)  # (N, 1)
-        feet_contact_pos = (feet_pos * contact_filt.unsqueeze(-1)).sum(dim=1) / num_feet_contact  # (N, 3)
-        base_pos = self.root_states[:, 0:3]
-        delta_pos = feet_contact_pos - base_pos
-        base_height = (delta_pos * self.projected_gravity).sum(1)  # (N,)
-        rew = torch.square(base_height - self.cfg.rewards.base_height_target) * (contact_filt.sum(1) > 0)
-        return rew
 
     def _reward_torques(self):
         # Penalize torques
@@ -1354,13 +1343,17 @@ class LeggedRobot(BaseTask):
 
     def _reward_feet_regulation(self):
         # CTS抬腿正则奖励, 在脚末端速度增大同时, 要求高度尽可能高
-        base_height = self._get_base_height()
         feet_pos = self.rigid_body_states.view(self.num_envs, self.num_bodies, 13)[:, self.feet_indices, 0:3]
         feet_xy_vel = self.rigid_body_states.view(self.num_envs, self.num_bodies, 13)[:, self.feet_indices, 7:9]
-        base_pos = self.root_states[:, 0:3].unsqueeze(1)
-        delta_feet = feet_pos - base_pos
-        feet2base_height = (delta_feet * self.projected_gravity.unsqueeze(1)).sum(-1)  # 脚相对于身体的高度 (N, 4)
-        feet_height = torch.clamp(base_height.unsqueeze(1) - feet2base_height, min=0.0)  # 脚相对于地面的高度 (N, 4)
+
+        terrain_heights = self._get_terrain_height_at(feet_pos[:, :, :2])
+        feet_height = torch.clamp(feet_pos[:, :, 2] - terrain_heights, min=0.0)
+
+        if self.cfg.rewards.feet_air_delta_height is not None:
+            delta = torch.abs(feet_height[:, 0:1] - feet_height[:, 1:2])
+            feet_height_mask = delta > self.cfg.rewards.feet_air_delta_height
+            feet_height = feet_height * feet_height_mask
+
         rew = (feet_xy_vel.pow(2).sum(-1) * torch.exp(-feet_height / (0.025 * self.cfg.rewards.base_height_target))).sum(-1)
         return rew
 
@@ -1370,4 +1363,14 @@ class LeggedRobot(BaseTask):
 
     def _reward_upright(self):
         return (-1 - self.projected_gravity[:, 2]) / 2
-    
+
+    def _reward_orientation_xy(self):
+        # Penalize non flat base orientation in xy axes
+        return torch.sum(torch.square(self.projected_gravity[:, :2]), dim=1)
+
+    def _reward_feet_distance(self):
+        # Penalize for feet distance
+        feet_xy = self.rigid_body_states.view(self.num_envs, self.num_bodies, 13)[:, self.feet_indices, :2]
+        distances = torch.norm(feet_xy[:, 0] - feet_xy[:, 1], dim=1)
+        rew = torch.clamp(self.cfg.rewards.feet_distance_theshold - distances, min=0.)
+        return rew
