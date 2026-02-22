@@ -1349,11 +1349,6 @@ class LeggedRobot(BaseTask):
         terrain_heights = self._get_terrain_height_at(feet_pos[:, :, :2])
         feet_height = torch.clamp(feet_pos[:, :, 2] - terrain_heights, min=0.0)
 
-        if self.cfg.rewards.feet_air_delta_height is not None:
-            delta = torch.abs(feet_height[:, 0:1] - feet_height[:, 1:2])
-            feet_height_mask = delta > self.cfg.rewards.feet_air_delta_height
-            feet_height = feet_height * feet_height_mask
-
         rew = (feet_xy_vel.pow(2).sum(-1) * torch.exp(-feet_height / (0.025 * self.cfg.rewards.base_height_target))).sum(-1)
         return rew
 
@@ -1368,9 +1363,17 @@ class LeggedRobot(BaseTask):
         # Penalize non flat base orientation in xy axes
         return torch.sum(torch.square(self.projected_gravity[:, :2]), dim=1)
 
-    def _reward_feet_distance(self):
-        # Penalize for feet distance
-        feet_xy = self.rigid_body_states.view(self.num_envs, self.num_bodies, 13)[:, self.feet_indices, :2]
-        distances = torch.norm(feet_xy[:, 0] - feet_xy[:, 1], dim=1)
-        rew = torch.clamp(self.cfg.rewards.feet_distance_theshold - distances, min=0.)
+    def _reward_feet_diff_height(self):
+        # \max(||v_{xy}^{feet_l}||_2^2, ||v_{xy}^{feet_r}||_2^2)\exp\left(-\frac{|p_z^{feet_l}-p_z^{feet_r}|}{0.025h^{des}_{base}}\right)
+        feet_pos = self.rigid_body_states.view(self.num_envs, self.num_bodies, 13)[:, self.feet_indices, 0:3]
+        feet_xy_vel = self.rigid_body_states.view(self.num_envs, self.num_bodies, 13)[:, self.feet_indices, 7:9]
+
+        terrain_heights = self._get_terrain_height_at(feet_pos[:, :, :2])
+        feet_height = torch.clamp(feet_pos[:, :, 2] - terrain_heights, min=0.0)
+        delta_height = torch.abs(feet_height[:, 0:1] - feet_height[:, 1:2])
+
+        exp_factor = torch.exp(-delta_height / (0.007 * self.cfg.rewards.base_height_target))
+        max_xy_vel = torch.max(feet_xy_vel.pow(2).sum(-1), dim=1)[0]
+
+        rew = max_xy_vel * exp_factor.squeeze(-1)
         return rew

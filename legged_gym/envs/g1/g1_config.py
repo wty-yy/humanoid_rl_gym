@@ -253,8 +253,6 @@ class G1Cfg(LeggedRobotCfg):
             "right_ankle_roll_joint": 0.0,
             **upper_body_to_default,
         }
-        # feet_distance_theshold = 0.2
-        feet_air_delta_height = 0.02  # delta height between feet for feet_regulation reward (None to ignore)
         class scales:
             tracking_lin_vel = 1.0
             tracking_ang_vel = 0.5
@@ -272,9 +270,9 @@ class G1Cfg(LeggedRobotCfg):
 
             upper_body_to_default = -0.1
             stance_to_default = -0.2
-            parallel_feet = -0.1
-            orientation_xy = -5.0
-            # feet_distance = -100.0
+            parallel_feet = -0.2
+            orientation_xy = -2.0
+            feet_diff_height = -0.05
 
     class noise(LeggedRobotCfg.noise):
         add_noise = True

@@ -1,5 +1,23 @@
+# 20260222
+## v0.0.4.5
+v0.0.4.4的训练中没有`orientation_xy`中2个的一个训出来前后正常抬脚了，但是加入orientation_xy都存在问题
+1. 降低`orientation_xy`奖励`-5.0 -> -2.0`
+2. 提高`parallel_feet`奖励`-0.1 -> -0.2`
+3. `correct_base_height`还原依旧最多增长到10
+4. 模仿`feet_regulation`奖励设计`feet_diff_height`差异足端高度，奖励系数为`-0.05`相同，sigma系数更小为`0.007`，两个足端用一个表示，只考虑较大的一个足端速度$\max(||v_{xy}^{feet_l}||_2^2, ||v_{xy}^{feet_r}||_2^2)\exp\left(-\frac{|p_z^{feet_l}-p_z^{feet_r}|}{0.007h^{des}_{base}}\right)$
+
+训练消融：
+1. v0.0.4.5: 包含orientation_xy, parallel_feet, feet_diff_height
+2. v0.0.4.5_no_orient: 包含parallel_feet, feet_diff_height
+3. v0.0.4.5_no_diff：包含orientation_xy, parallel_feet
+4. v0.0.4.5_no_all：不包含orientation_xy, feet_diff_height
 # 20260220
+## v0.0.4.4
+v0.0.4.3直接传入步频训练效果很差，首先feet_regulation崩了，尝试直接用base_height引导
+1. 修改`feet_regulation`可能是存在差异性高度问题
+2. 修改`correct_base_height`线性增长从`0->1w`从`1->20`
 ## v0.0.4.3
+v0.0.4.2问题在于向后移动时候都是跳跃姿势，考虑是否能加入步态的引导奖励，而非直接传入步频
 1. 参考CTS加入新奖励`orientation_xy`保证上肢保持竖直
 2. （先不加）两脚间距惩罚`feet_distance`，鼓励两脚间距大于阈值0.2m（先不添加这个，可能有问题，只在前后移动有效）
 3. 修改`feet_regulation`奖励中计算脚距离地面高度为高度图方法，比之前投影的方法更精确，并加入双脚差异性高度条件，当有差异抬脚高度超过0.02m时才能认为是抬脚，避免双脚起跳的问题
