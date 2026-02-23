@@ -277,6 +277,14 @@ class G1Cfg(LeggedRobotCfg):
     class noise(LeggedRobotCfg.noise):
         add_noise = True
 
+class G1TerrainCfg(G1Cfg):
+    class terrain(LeggedRobotCfg.terrain):
+        max_init_terrain_level = 5
+        # [wave, slope, rough_slope, stairs up, stairs down, obstacles, stepping_stones, gap, flat]
+        terrain_proportions = [0.05, 0.20, 0.05, 0.25, 0.10, 0.20, 0.0, 0.0, 0.15]  # 这个更偏向平地斜坡
+        # terrain_proportions = [0.15, 0.20, 0.10, 0.0, 0.20, 0.20, 0.0, 0.0, 0.15]  # 去除上楼梯
+        move_down_by_accumulated_xy_command = True # move down the terrain curriculum based on accumulated xy command distance instead of absolute distance
+
 class G1CfgPPO(LeggedRobotCfgPPO):
     class algorithm(LeggedRobotCfgPPO.algorithm):
         entropy_coef = 0.01
