@@ -90,17 +90,10 @@ class Terrain:
                                 length=self.width_per_env_pixels,
                                 vertical_scale=self.cfg.vertical_scale,
                                 horizontal_scale=self.cfg.horizontal_scale)
-        IS_HARD = True
-        if IS_HARD:
-            # hard
-            slope = 0.1 + difficulty * 0.52  # max: 29.6 degrees
-            step_height = 0.05 + 0.23 * difficulty  # max: 0.257 m
-            discrete_obstacles_height = 0.05 + difficulty * 0.25  # max: 0.275 m
-        else:
-            # default (easy)
-            slope = difficulty * 0.4  # max: 19.8 degrees
-            step_height = 0.05 + 0.18 * difficulty  # max: 0.212 m
-            discrete_obstacles_height = 0.05 + difficulty * 0.2  # max: 0.23 m
+        slope = 0.1 + difficulty * 0.52  # max: 29.6 degrees
+        down_step_height = 0.05 + 0.23 * difficulty  # max: 0.257 m
+        up_step_height = 0.05 + 0.11 * difficulty  # max: 0.149 m
+        discrete_obstacles_height = 0.05 + difficulty * 0.25  # max: 0.275 m
 
         stepping_stones_size = 1.5 * (1.05 - difficulty)
         stone_distance = 0.05 if difficulty==0 else 0.1
@@ -127,10 +120,11 @@ class Terrain:
         elif choice < self.proportions[4]:  # 下楼梯
             terrain.terrain_name = "stairs_down"
             terrain.terrain_id = 4
+            step_height = down_step_height
             if choice<self.proportions[3]:  # 上楼梯
                 terrain.terrain_name = "stairs_up"
                 terrain.terrain_id = 3
-                step_height *= -1
+                step_height = -up_step_height
             terrain_utils.pyramid_stairs_terrain(terrain, step_width=0.31, step_height=step_height, platform_size=3.)
         elif choice < self.proportions[5]:  # 障碍物
             terrain.terrain_name = "obstacles"

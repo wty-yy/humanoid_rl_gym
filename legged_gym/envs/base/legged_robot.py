@@ -121,7 +121,11 @@ class LeggedRobot(BaseTask):
         self.base_lin_vel[:] = quat_rotate_inverse(self.base_quat, self.root_states[:, 7:10])
         self.base_ang_vel[:] = quat_rotate_inverse(self.base_quat, self.root_states[:, 10:13])
         self.projected_gravity[:] = quat_rotate_inverse(self.base_quat, self.gravity_vec)
-        self.max_move_distance = self.max_move_distance.maximum(torch.norm(self.root_states[:, :2] - self.env_origins[:, :2], dim=1))
+        self.feet_pos[:] = self.rigid_body_states.view(self.num_envs, self.num_bodies, 13)[:, self.feet_indices, 0:3]
+        self.feet_xy_vel[:] = self.rigid_body_states.view(self.num_envs, self.num_bodies, 13)[:, self.feet_indices, 7:9]
+        feet_dist_to_origin = torch.norm(self.feet_pos[:, :, :2] - self.env_origins[:, None, :2], dim=-1)
+        max_feet_distance = feet_dist_to_origin.max(dim=-1)[0]
+        self.max_move_distance[:] = self.max_move_distance.maximum(max_feet_distance)
 
         self._post_physics_step_callback()
 
@@ -719,6 +723,8 @@ class LeggedRobot(BaseTask):
         self.base_pos = self.root_states[:self.num_envs, 0:3]
         self.contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1, 3) # shape: num_envs, num_bodies, xyz axis
         self.rigid_body_states = gymtorch.wrap_tensor(rigid_body_state)
+        self.feet_pos = self.rigid_body_states.view(self.num_envs, self.num_bodies, 13)[:, self.feet_indices, 0:3]
+        self.feet_xy_vel = self.rigid_body_states.view(self.num_envs, self.num_bodies, 13)[:, self.feet_indices, 7:9]
         if self.cfg.terrain.measure_heights:
             self.height_points = self._init_height_points()
             x_points = self.height_points[0, :, 0]
@@ -775,6 +781,7 @@ class LeggedRobot(BaseTask):
         # joint positions offsets and PD gains
         self.default_dof_pos = torch.zeros(self.num_dof, dtype=torch.float, device=self.device, requires_grad=False)
         self.upper_body_rew_pos = torch.zeros(len(self.upper_body_dof_indices), dtype=torch.float, device=self.device, requires_grad=False)
+        self.upper_body_scaler = torch.zeros(len(self.upper_body_dof_indices), dtype=torch.float, device=self.device, requires_grad=False)
         self.stance_body_rew_pos = torch.zeros(self.num_dof, dtype=torch.float, device=self.device, requires_grad=False)
         for i in range(self.num_dofs):
             name = self.dof_names[i]
@@ -783,8 +790,8 @@ class LeggedRobot(BaseTask):
             self.stance_body_rew_pos[i] = self.cfg.rewards.stance_body_to_default[name]
             if i < len(self.upper_body_dof_indices):
                 upper_name = self.dof_names[self.upper_body_dof_indices[i]]
-                angle_upper = self.cfg.rewards.upper_body_to_default[upper_name]
-                self.upper_body_rew_pos[i] = angle_upper
+                self.upper_body_rew_pos[i] = self.cfg.rewards.upper_body_to_default[upper_name]
+                self.upper_body_scaler[i] = self.cfg.rewards.upper_body_scaler[upper_name]
             found = False
             for dof_name in self.cfg.control.stiffness.keys():
                 if dof_name in name:
@@ -1343,13 +1350,10 @@ class LeggedRobot(BaseTask):
 
     def _reward_feet_regulation(self):
         # CTS抬腿正则奖励, 在脚末端速度增大同时, 要求高度尽可能高
-        feet_pos = self.rigid_body_states.view(self.num_envs, self.num_bodies, 13)[:, self.feet_indices, 0:3]
-        feet_xy_vel = self.rigid_body_states.view(self.num_envs, self.num_bodies, 13)[:, self.feet_indices, 7:9]
+        terrain_heights = self._get_terrain_height_at(self.feet_pos[:, :, :2])
+        feet_height = torch.clamp(self.feet_pos[:, :, 2] - terrain_heights, min=0.0)
 
-        terrain_heights = self._get_terrain_height_at(feet_pos[:, :, :2])
-        feet_height = torch.clamp(feet_pos[:, :, 2] - terrain_heights, min=0.0)
-
-        rew = (feet_xy_vel.pow(2).sum(-1) * torch.exp(-feet_height / (0.025 * self.cfg.rewards.base_height_target))).sum(-1)
+        rew = (self.feet_xy_vel.pow(2).sum(-1) * torch.exp(-feet_height / (0.025 * self.cfg.rewards.base_height_target))).sum(-1)
         return rew
 
     def _reward_similar_to_default(self):
@@ -1365,15 +1369,12 @@ class LeggedRobot(BaseTask):
 
     def _reward_feet_diff_height(self):
         # \max(||v_{xy}^{feet_l}||_2^2, ||v_{xy}^{feet_r}||_2^2)\exp\left(-\frac{|p_z^{feet_l}-p_z^{feet_r}|}{0.025h^{des}_{base}}\right)
-        feet_pos = self.rigid_body_states.view(self.num_envs, self.num_bodies, 13)[:, self.feet_indices, 0:3]
-        feet_xy_vel = self.rigid_body_states.view(self.num_envs, self.num_bodies, 13)[:, self.feet_indices, 7:9]
-
-        terrain_heights = self._get_terrain_height_at(feet_pos[:, :, :2])
-        feet_height = torch.clamp(feet_pos[:, :, 2] - terrain_heights, min=0.0)
+        terrain_heights = self._get_terrain_height_at(self.feet_pos[:, :, :2])
+        feet_height = torch.clamp(self.feet_pos[:, :, 2] - terrain_heights, min=0.0)
         delta_height = torch.abs(feet_height[:, 0:1] - feet_height[:, 1:2])
 
         exp_factor = torch.exp(-delta_height / (0.007 * self.cfg.rewards.base_height_target))
-        max_xy_vel = torch.max(feet_xy_vel.pow(2).sum(-1), dim=1)[0]
+        max_xy_vel = torch.max(self.feet_xy_vel.pow(2).sum(-1), dim=1)[0]
 
         rew = max_xy_vel * exp_factor.squeeze(-1)
         return rew

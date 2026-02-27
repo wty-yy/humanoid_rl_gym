@@ -172,6 +172,17 @@ class G1Cfg(LeggedRobotCfg):
         }]
         # [wave, slope, rough slope, stairs up, stairs down, obstacles, stepping stones, gap, flat]
         gait_phase = 0.64  # cycle time for gait phase [s]
+        terrain_max_command_ranges = [
+            {'lin_vel_x': [-1.5, 1.5], 'lin_vel_y': [-1.5, 1.5], 'ang_vel_yaw': [-1.5, 1.5], 'heading': [-1.57, 1.57]},  # wave
+            {'lin_vel_x': [-1.5, 1.5], 'lin_vel_y': [-1.5, 1.5], 'ang_vel_yaw': [-1.5, 1.5], 'heading': [-1.57, 1.57]},  # slope
+            {'lin_vel_x': [-1.5, 1.5], 'lin_vel_y': [-1.5, 1.5], 'ang_vel_yaw': [-1.5, 1.5], 'heading': [-1.57, 1.57]},  # rough slope
+            {'lin_vel_x': [-0.8, 0.8], 'lin_vel_y': [-1.0, 1.0], 'ang_vel_yaw': [-1.5, 1.5], 'heading': [-1.57, 1.57]},  # stairs up
+            {'lin_vel_x': [-1.0, 1.0], 'lin_vel_y': [-1.0, 1.0], 'ang_vel_yaw': [-1.5, 1.5], 'heading': [-1.57, 1.57]},  # stairs down
+            {'lin_vel_x': [-1.0, 1.0], 'lin_vel_y': [-1.0, 1.0], 'ang_vel_yaw': [-1.5, 1.5], 'heading': [-1.57, 1.57]},  # obstacles
+            {'lin_vel_x': [-1.0, 1.0], 'lin_vel_y': [-1.0, 1.0], 'ang_vel_yaw': [-1.5, 1.5], 'heading': [-1.57, 1.57]},  # stepping stones
+            {'lin_vel_x': [-1.0, 1.0], 'lin_vel_y': [-1.0, 1.0], 'ang_vel_yaw': [-1.5, 1.5], 'heading': [-1.57, 1.57]},  # gap
+            {'lin_vel_x': [-2.0, 2.0], 'lin_vel_y': [-1.5, 1.5], 'ang_vel_yaw': [-1.5, 1.5], 'heading': [-1.57, 1.57]},  # flat
+        ]
 
         class ranges:
             lin_vel_x = [-0.3, 0.3] # min max [m/s]
@@ -237,6 +248,25 @@ class G1Cfg(LeggedRobotCfg):
             "right_wrist_roll_joint": -0.15,
             "right_wrist_pitch_joint": 0.0,
             "right_wrist_yaw_joint": 0.0,
+        }
+        upper_body_scaler = {
+            "waist_yaw_joint": 3.0,
+            "waist_roll_joint": 3.0,
+            "waist_pitch_joint": 3.0,
+            "left_shoulder_pitch_joint": 1.0,
+            "left_shoulder_roll_joint": 1.0,
+            "left_shoulder_yaw_joint": 1.0,
+            "left_elbow_joint": 1.0,
+            "left_wrist_roll_joint": 1.0,
+            "left_wrist_pitch_joint": 1.0,
+            "left_wrist_yaw_joint": 1.0,
+            "right_shoulder_pitch_joint": 1.0,
+            "right_shoulder_roll_joint": 1.0,
+            "right_shoulder_yaw_joint": 1.0,
+            "right_elbow_joint": 1.0,
+            "right_wrist_roll_joint": 1.0,
+            "right_wrist_pitch_joint": 1.0,
+            "right_wrist_yaw_joint": 1.0,
         }
         stance_body_to_default = {
             "left_hip_pitch_joint": -0.1,
