@@ -1,3 +1,16 @@
+# 20260308
+## v0.0.5.1
+v0.0.5训练效果不错所有模型都学到稳定的抬脚走路了，不过真机上还是有明显的跺脚现象，考虑加入如下两个奖励：
+1. 加入`feet_landing_vel`奖励，仅在足端首次触地时生效，惩罚脚向下落地速度过大，具体为`clamp(-v_z^{foot} - 0.15, 0)^2`，其中`0.15m/s`作为deadband，避免正常轻微接触也被惩罚。奖励系数初始设置为`-0.5`
+2. 加入`feet_impact`奖励，仅在足端首次触地时生效，惩罚接触力超过阈值的部分，即`clamp(||F^{foot}||_2 - F_{max}, 0)`，初始系数设置为`-2e-4`
+3. 将`max_contact_force`从`343 -> 220`，让`feet_impact`真正对较重落脚生效，避免原始阈值过大导致奖励基本不起作用
+4. 在`compute_reward()`中统一缓存`first_contacts`和`filtered_contacts`，避免`feet_air_time`、`feet_landing_vel`、`feet_impact`三个奖励之间因为`last_contacts`更新顺序不同而互相干扰
+
+调参建议：
+1. 当前推荐起点：`feet_landing_vel=-0.5`，`feet_impact=-2e-4`，`max_contact_force=220`
+2. 如果真机上仍然踩地偏重，优先调大`feet_landing_vel: -0.5 -> -0.8`，其次减小`max_contact_force: 220 -> 200`
+3. 如果接触声仍然明显，再调大`feet_impact: -2e-4 -> -5e-4`
+4. 如果出现拖脚、小碎步或者不敢迈步，优先减小`feet_impact`，其次恢复`max_contact_force`到`240~260`
 # 20260227
 ## v0.0.5
 v0.0.4.6接着训的效果不错，能简单上楼梯到难度1.8（台阶高度0.0914），已经能在真机上有很好表现了，唯一问题在腰部存在严重的前后倾斜，加入腰部限制奖励

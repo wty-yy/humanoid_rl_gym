@@ -221,7 +221,7 @@ class G1Cfg(LeggedRobotCfg):
         soft_dof_pos_limit = 0.9
         base_height_target = 0.78
         only_positive_rewards = False
-        max_contact_force = 343. # forces above this value are penalized, g1 weight 35kg
+        max_contact_force = 220. # forces above this value are penalized to reduce heavy touchdown
         curriculum_rewards = [
             {'reward_name': 'lin_vel_z', 'start_iter': 0, 'end_iter': 1500, 'start_value': 1.0, 'end_value': 0.0},
             {'reward_name': 'correct_base_height', 'start_iter': 0, 'end_iter': 5000, 'start_value': 1.0, 'end_value': 10.0},
@@ -303,6 +303,8 @@ class G1Cfg(LeggedRobotCfg):
             parallel_feet = -0.2
             orientation_xy = -2.0
             feet_diff_height = -0.05
+            feet_landing_vel = -0.5
+            feet_impact = -2e-4
 
     class noise(LeggedRobotCfg.noise):
         add_noise = True
