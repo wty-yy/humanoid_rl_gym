@@ -5,6 +5,8 @@
 	</p>
 </div>
 
+https://github.com/user-attachments/assets/6be3ccb8-8292-48e3-a89e-dc3bf2d27eae
+
 <p align="center">
 	<strong>This repository builds on <a href="https://github.com/wty-yy/go2_rl_gym">go2_rl_gym</a> to train the Unitree G1 humanoid with reinforcement learning.</strong>
 </p>
